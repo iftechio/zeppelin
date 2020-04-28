@@ -15,3 +15,11 @@ export LIVY_HOME=<path_of_livy_0.2.0>
 export SPARK_HOME=<path_of_spark-1.5.2>
 mvn clean verify -pl livy -DfailIfNoTests=false -DskipRat
 ```
+
+# Patch Note
+
+Since the method `parseSQLOutput` in `LivySQLInterpreter` works improperly with complicated unicode content (such as chinese, which leads unexpected result of calculating offsets), we just split each row by '|'. This may cost more memory but currently works well.
+
+Besides, after applying `escapeEcmaScript`, the unicode content got corrupted, we add `unescapeJava` to fix it.
+
+After patching, one have to compile the zeppelin-livy interpreter, and replace `$ZEPPELIN_HOME/interpreter/livy/zeppelin-livy-$Z_VERSION.jar` with the compiled jar package.

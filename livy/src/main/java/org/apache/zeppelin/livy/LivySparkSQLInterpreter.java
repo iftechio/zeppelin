@@ -18,6 +18,7 @@
 package org.apache.zeppelin.livy;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.text.StringEscapeUtils;
 import org.apache.zeppelin.interpreter.InterpreterContext;
 import org.apache.zeppelin.interpreter.InterpreterException;
 import org.apache.zeppelin.interpreter.InterpreterOutput;
@@ -31,8 +32,6 @@ import org.apache.zeppelin.scheduler.SchedulerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
-
-import static org.apache.commons.lang3.StringEscapeUtils.escapeEcmaScript;
 
 /**
  * Livy SparkSQL Interpreter for Zeppelin.
@@ -155,64 +154,21 @@ public class LivySparkSQLInterpreter extends BaseLivyInterpreter {
 
   protected List<String> parseSQLOutput(String output) {
     List<String> rows = new ArrayList<>();
-    // Get first line by breaking on \n. We can guarantee
-    // that \n marks the end of the first line, but not for
-    // subsequent lines (as it could be in the cells)
-    String firstLine = output.split("\n", 2)[0];
-    // at least 4 lines, even for empty sql output
-    //    +---+---+
-    //    |  a|  b|
-    //    +---+---+
-    //    +---+---+
-
-    // use the first line to determine the position of each cell
-    String[] tokens = StringUtils.split(firstLine, "\\+");
-    // pairs keeps the start/end position of each cell. We parse it from the first row
-    // which use '+' as separator
-    List<Pair> pairs = new ArrayList<>();
-    int start = 0;
-    int end = 0;
-    for (String token : tokens) {
-      start = end + 1;
-      end = start + token.length();
-      pairs.add(new Pair(start, end));
-    }
-
-    // Use the header line to determine the position
-    // of subsequent lines
-    int lineStart = 0;
-    int lineEnd = firstLine.length();
-    while (lineEnd < output.length()) {
-      // Only match format "|....|"
-      // skip line like "+---+---+" and "only showing top 1 row"
-      String line = output.substring(lineStart, lineEnd);
-      // Use the DOTALL regex mode to match newlines
-      if (line.matches("(?s)^\\|.*\\|$")) {
-        List<String> cells = new ArrayList<>();
-        for (Pair pair : pairs) {
-          // strip the blank space around the cell and escape the string
-          cells.add(escapeEcmaScript(line.substring(pair.start, pair.end)).trim());
-        }
-        rows.add(StringUtils.join(cells, "\t"));
+    for (String line : output.split("\n")) {
+      // Skip lines of the form '+---+---+'
+      if (line.matches("^\\+(?:-*\\+)*$")) {
+        continue;
       }
-      // Determine position of next line skipping newline
-      lineStart += firstLine.length() + 1;
-      lineEnd = lineStart + firstLine.length();
+      List<String> cells = new ArrayList<>();
+      String[] entries = StringUtils.split(line, "\\|");
+      for (String entry : entries) {
+        cells.add(
+          StringEscapeUtils.unescapeJava(StringEscapeUtils.escapeEcmaScript(entry)).trim()
+        );
+      }
+      rows.add(StringUtils.join(cells, "\t"));
     }
     return rows;
-  }
-
-  /**
-   * Represent the start and end index of each cell.
-   */
-  private static class Pair {
-    private int start;
-    private int end;
-
-    Pair(int start, int end) {
-      this.start = start;
-      this.end = end;
-    }
   }
 
   public boolean concurrentSQL() {
